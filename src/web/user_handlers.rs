@@ -1,62 +1,130 @@
 // src/web/user_handlers.rs
-use crate::{
-    error::{AppError, AppResult}, // Usar AppResult e AppError
-    //models::user::User,          // Usar o modelo User (se buscar na DB)
-    services::user_service,     // Para buscar dados do user
-    state::AppState,
-    templates::UserPage,        // A struct do template Askama
-    web::mw_auth::UserId,       // Importar UserId das extensões
-    web::mw_presence::ROLES_QUE_ACEDEM_PRESENCA,
-};
-use askama::Template;
+use crate::state::AppState;
+// Importar Template é obrigatório para usar .render()
+use askama::Template; 
+use crate::templates::{UserPage, MeuServico, NotificacaoTroca};
+use crate::services::escala_service;
 use axum::{
-    extract::{Extension, State}, // Adicionar Extension
-    response::{Html, IntoResponse},
+    extract::{State, Form},
+    response::{Html, IntoResponse, Redirect},
 };
-// Remover Session daqui, pois o middleware já validou e passou o ID via Extension
-// use tower_sessions::Session;
+use tower_sessions::Session;
+use chrono::{Datelike, Local};
+use serde::Deserialize;
 
-// Handler para GET /user (protegido pelo middleware)
+// Helper para traduzir dias
+fn weekday_to_pt(wd: chrono::Weekday) -> &'static str {
+    match wd {
+        chrono::Weekday::Mon => "Segunda", chrono::Weekday::Tue => "Terça",
+        chrono::Weekday::Wed => "Quarta", chrono::Weekday::Thu => "Quinta",
+        chrono::Weekday::Fri => "Sexta", chrono::Weekday::Sat => "Sábado",
+        chrono::Weekday::Sun => "Domingo",
+    }
+}
+fn month_to_pt(m: u32) -> &'static str {
+    match m {
+        1 => "Jan", 2 => "Fev", 3 => "Mar", 4 => "Abr", 5 => "Mai", 6 => "Jun",
+        7 => "Jul", 8 => "Ago", 9 => "Set", 10 => "Out", 11 => "Nov", 12 => "Dez", _ => ""
+    }
+}
+
+// Payload do formulário de resposta
+#[derive(Deserialize)]
+pub struct RespostaTrocaForm {
+    pub troca_id: String,
+    pub acao: String, // "aceitar" | "recusar"
+}
+
+// --- HANDLER DASHBOARD ---
 pub async fn user_page_handler(
-    State(state): State<AppState>, // Acesso ao pool da DB
-    Extension(user_id_ext): Extension<UserId>, // <<< Obtém o UserId da extensão (posto pelo middleware)
-) -> AppResult<impl IntoResponse> { // Retorna AppResult com UserPage ou erro
+    State(state): State<AppState>,
+    session: Session,
+) -> impl IntoResponse {
+    let user_id = session.get::<String>("user_id").await.unwrap().unwrap_or_default();
+    
+    // 1. Dados do Utilizador
+    let user = sqlx::query!("SELECT name FROM users WHERE id = ?", user_id)
+        .fetch_one(&state.db_pool).await.unwrap();
 
-    let user_id = user_id_ext.0; // Extrai o ID da struct UserId
-    tracing::debug!("GET /user: Acesso para {}", user_id);
+    // 2. Meus Serviços Futuros
+    let hoje = Local::now().date_naive();
+    let servicos_db = sqlx::query!(
+        r#"
+        SELECT a.data, p.nome as posto 
+        FROM alocacoes a
+        JOIN postos p ON a.posto_id = p.id
+        WHERE a.user_id = ? AND a.data >= ?
+        ORDER BY a.data ASC LIMIT 5
+        "#,
+        user_id, hoje
+    ).fetch_all(&state.db_pool).await.unwrap_or_default();
 
-    // Busca os detalhes do utilizador na base de dados
-    // (Necessário para obter o nome e outros detalhes)
-    let user = user_service::find_user_by_id(&state.db_pool, &user_id)
-        .await? // Propaga erro da DB
-        .ok_or_else(|| { // Se o user_id (validado pelo middleware) não existir mais na DB (!)
-            tracing::error!("CRÍTICO: user_id '{}' autenticado não encontrado na DB!", user_id);
-            // Neste caso, talvez forçar logout seria o ideal, mas por agora erro interno.
-            AppError::InternalServerError
-        })?;
+    let meus_servicos = servicos_db.into_iter().map(|s| {
+        let d = chrono::NaiveDate::parse_from_str(&s.data, "%Y-%m-%d").unwrap_or(hoje);
+        MeuServico {
+            data: s.data,
+            dia_semana: weekday_to_pt(d.weekday()).to_string(),
+            dia_mes: d.format("%d").to_string(),
+            mes_extenso: month_to_pt(d.month()).to_string(),
+            posto: s.posto,
+        }
+    }).collect();
 
+    // 3. Trocas Pendentes (Onde EU sou o substituto)
+    let trocas_db = sqlx::query!(
+        r#"
+        SELECT t.id, t.motivo, u.name as solicitante, p.nome as posto, a.data
+        FROM trocas t
+        JOIN users u ON t.solicitante_id = u.id
+        JOIN alocacoes a ON t.alocacao_id = a.id
+        JOIN postos p ON a.posto_id = p.id
+        WHERE t.substituto_id = ? AND t.status = 'Pendente'
+        ORDER BY t.criado_em DESC
+        "#,
+        user_id
+    ).fetch_all(&state.db_pool).await.unwrap_or_default();
 
-    let roles = user_service::get_user_roles(&state.db_pool, &user_id).await?;
-    let is_admin = roles.iter().any(|r| r.eq_ignore_ascii_case("admin"));
-    tracing::debug!("User '{}' é admin? {}", user_id, is_admin);
+    let trocas_pendentes = trocas_db.into_iter().map(|t| {
+        let d = chrono::NaiveDate::parse_from_str(&t.data, "%Y-%m-%d").unwrap_or(hoje);
+        NotificacaoTroca {
+            troca_id: t.id,
+            solicitante: t.solicitante,
+            data: d.format("%d/%m").to_string(),
+            posto: t.posto,
+            motivo: t.motivo.unwrap_or_default(),
+        }
+    }).collect();
 
-    let presence_roles = ROLES_QUE_ACEDEM_PRESENCA;
-    let can_access_presence = user_service::check_user_role_any(&state.db_pool, &user_id, &presence_roles).await?;
-
-    // Cria a struct do template com os dados do utilizador
+    // Instancia a struct definida em templates.rs
     let template = UserPage {
-        user_id: user.id, // Passa o ID para o template
-        user_name: user.name, // Passa o nome para o template
-        is_admin,
-        can_access_presence,
+        user_id,
+        name: user.name, // Campo correto (não é user_name)
+        meus_servicos,
+        trocas_pendentes, // Campo correto
+    };
+    
+    // Renderiza
+    match template.render() {
+        Ok(html) => Html(html).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR, 
+            format!("Erro ao renderizar template: {}", e)
+        ).into_response()
+    }
+}
+
+// --- HANDLER POST: RESPONDER TROCA ---
+pub async fn handle_responder_troca(
+    State(state): State<AppState>,
+    session: Session,
+    Form(form): Form<RespostaTrocaForm>,
+) -> impl IntoResponse {
+    let user_id = match session.get::<String>("user_id").await {
+        Ok(Some(id)) => id,
+        _ => return Redirect::to("/").into_response(),
     };
 
-    // Renderiza o template
-    match template.render() {
-        Ok(html) => Ok(Html(html).into_response()), // Ok com UserPage renderizada
-        Err(e) => {
-            tracing::error!("Falha ao renderizar template UserPage: {}", e);
-            Err(AppError::InternalServerError) // Erro interno se a renderização falhar
-        }
-    }
+    let _ = escala_service::responder_troca_usuario(&state.db_pool, &form.troca_id, &user_id, &form.acao).await;
+    
+    Redirect::to("/user").into_response()
 }

@@ -46,12 +46,15 @@ pub fn create_router(app_state: AppState) -> Router {
 
     let escala_routes = Router::new()
         // Gera a escala (JSON: { "data": "2025-10-25", "tipo": "RN" })
-        .route("/gerar", post(escala_handlers::handle_gerar_escala))
         .route("/", get(escala_handlers::handle_pagina_escala))
-        // Aprova troca (URL: /escala/trocas/{id}/aprovar)
-        .route("/trocas/{id}/aprovar", post(escala_handlers::handle_aprovar_troca))
         // Vê a escala (URL: /escala/ver?data=2025-10-25)
-        .route("/ver", get(escala_handlers::handle_ver_escala));
+        // Solicita troca (JSON: { "alocacao_id": "123", "substituto_id": "456", "motivo": "Motivo da Troca" })
+        .route("/gerar_periodo", post(escala_handlers::handle_gerar_periodo))
+        .route("/publicar", post(escala_handlers::handle_publicar_periodo))
+        .route("/trocas/solicitar", post(escala_handlers::handle_solicitar_troca))
+        .route("/trocas/{id}/aprovar", post(escala_handlers::handle_aprovar_troca))
+        .route("/admin", get(escala_handlers::handle_admin_escala_page))
+        .route("/errata/{data}", post(escala_handlers::handle_errata));
         // Aqui você pode adicionar um middleware de Admin se quiser proteger estas ações
         // .route_layer(middleware::from_fn_with_state(app_state.clone(), mw_admin::require_admin));
 
@@ -61,6 +64,7 @@ pub fn create_router(app_state: AppState) -> Router {
     let authenticated_routes = Router::new()
         // Rotas que exigem apenas login
         .route("/user", get(user_handlers::user_page_handler))
+        .route("/user/responder_troca", post(user_handlers::handle_responder_troca))
         // Adicionar outras rotas autenticadas gerais aqui...
 
         // Aninha as rotas de admin sob /admin

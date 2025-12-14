@@ -5,33 +5,97 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Merca Simples{% endblock %}</title>
-    {# Estilos básicos inline para simplicidade inicial #}
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 15px; background-color: #f9f9f9; color: #333; }
-        .container { background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #0056b3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        nav { margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
-        nav a { margin-right: 15px; text-decoration: none; color: #007bff; font-weight: 500; }
-        nav a:hover { text-decoration: underline; }
-        .error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: 500; }
-        input[type="text"], input[type="password"] { display: block; width: 95%; max-width: 300px; margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
-        button { padding: 10px 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 1em; }
-        button:hover { background-color: #0056b3; }
+        :root {
+            --primary-color: #3f51b5; /* Indigo */
+            --primary-dark: #303f9f;
+            --accent-color: #ff4081; /* Pink */
+            --background-color: #f5f5f5;
+            --card-background: #ffffff;
+            --text-color: #212121;
+            --text-light: #757575;
+            --border-color: #e0e0e0;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1), 0 2px 10px rgba(0,0,0,0.08);
+            --success-color: #4caf50;
+            --danger-color: #f44336;
+        }
+        body {
+            font-family: 'Roboto', -apple-system, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+        
+        /* Navbar Simples (Estilo antigo adaptado) */
+        nav {
+            background-color: var(--primary-dark);
+            padding: 15px 20px;
+            color: white;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        nav a { color: rgba(255,255,255,0.9); text-decoration: none; font-weight: 500; text-transform: uppercase; font-size: 0.9em; }
+        nav a:hover { color: white; text-decoration: underline; }
+
+        /* Cards */
+        .card {
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 25px;
+        }
+        .card-title {
+            font-size: 1.25em; font-weight: 500; margin: 0 0 16px 0; padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color); display: flex; align-items: center;
+            color: var(--primary-dark);
+        }
+        .card-title .icon { font-size: 1.5em; margin-right: 12px; color: var(--primary-color); }
+
+        /* Botões */
+        .btn {
+            padding: 10px 24px; border: none; border-radius: 4px; text-decoration: none;
+            font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-block;
+            text-align: center; font-size: 14px; text-transform: uppercase; color: white;
+            background-color: var(--primary-color);
+        }
+        .btn:hover { background-color: var(--primary-dark); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .btn-accent { background-color: var(--accent-color); }
+        .btn-danger { background-color: var(--danger-color); }
+        
+        /* Inputs */
+        input, select, textarea {
+            padding: 10px; border: 1px solid var(--border-color); border-radius: 4px;
+            font-size: 16px; width: 100%; box-sizing: border-box; margin-bottom: 10px;
+        }
     </style>
     {% block head_extra %}{% endblock %}
 </head>
 <body>
+    <nav>
+        <div style="font-weight: bold; font-size: 1.2em; margin-right: auto;">Merca Simples</div>
+        <a href="/">Início</a>
+        <a href="/escala/">Escalas</a>
+        <a href="/user">Dashboard</a>
+        {% block nav %}{% endblock %}
+        <a href="/logout" style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 4px;">Sair</a>
+    </nav>
+
     <div class="container">
-         <nav>
-            {# Link "Início" sempre aponta para a raiz (que redireciona para login se não logado) #}
-            <a href="/">Início</a>
-            {# Bloco para adicionar links dinâmicos (Login/Logout/User) #}
-            {% block nav %}{% endblock %}
-        </nav>
-        <h1>{% block heading %}{% endblock %}</h1> {# Título principal da página #}
-        {% block content %}{% endblock %} {# Conteúdo específico da página #}
+        {% block content %}{% endblock %}
     </div>
-    {% block scripts %}{% endblock %} {# Para JS, se necessário #}
+    
+    {% block scripts %}{% endblock %}
 </body>
 </html>

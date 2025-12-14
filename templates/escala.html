@@ -1,134 +1,260 @@
 {% extends "layout.html" %}
 
+{% block head_extra %}
+<style>
+    /* ... (CSS anterior mantém-se igual) ... */
+    .tab-container { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #e0e0e0; }
+    .tab-btn { padding: 12px 20px; border: none; background: none; font-size: 16px; font-weight: 500; color: #757575; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.3s; }
+    .tab-btn:hover { background-color: rgba(0,0,0,0.05); }
+    .tab-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+    .tab-content { display: none; animation: fadeIn 0.3s; }
+    .tab-content.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .day-card { background-color: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); padding: 20px; margin-bottom: 25px; }
+    .day-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; }
+    .day-title { font-size: 1.2em; font-weight: 500; color: var(--primary-dark); margin: 0; }
+    
+    /* Tags de Tipo de Dia */
+    .day-tag { font-size: 0.8em; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
+    .tag-rn { background: #eee; color: #333; }
+    .tag-rd { background: #ffebee; color: #c62828; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: #757575; font-size: 0.85em; font-weight: 500; padding: 8px; border-bottom: 1px solid #eee; }
+    td { padding: 10px 8px; border-bottom: 1px solid #f5f5f5; font-size: 0.95em; }
+    .person-cell { cursor: pointer; transition: background 0.2s; border-radius: 4px; }
+    .person-cell:hover { background-color: #e8eaf6; color: var(--primary-color); }
+    .meu-servico { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .punicao { color: #c62828; font-weight: bold; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-box { background: white; width: 90%; max-width: 450px; padding: 25px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col">
-            <h2 class="h3 mb-0 text-gray-800">📅 Gestão de Escalas</h2>
-        </div>
-    </div>
-
-    <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 font-weight-bold text-primary">Controlo de Serviço</h6>
-        </div>
-        <div class="card-body">
-            <form method="GET" action="/escala/" class="row g-3 align-items-end" id="formControlo">
-                
-                <div class="col-md-3">
-                    <label for="data" class="form-label">Data</label>
-                    <input type="date" class="form-control" id="data" name="data" 
-                           value="{{ data_selecionada }}" required>
-                </div>
-
-                <div class="col-md-3">
-                    <label for="tipo" class="form-label">Tipo de Rotina</label>
-                    <select class="form-select" id="tipo" name="tipo">
-                        <option value="RN" {% if tipo_selecionado == "RN" %}selected{% endif %}>Rotina Normal (Preta)</option>
-                        <option value="RD" {% if tipo_selecionado == "RD" %}selected{% endif %}>Domingo/Feriado (Vermelha)</option>
-                    </select>
-                </div>
-
-                <div class="col-md-6 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Consultar
-                    </button>
-
-                    <button type="button" onclick="gerarEscala()" class="btn btn-danger">
-                        <i class="fas fa-cogs"></i> Gerar Escala
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {% if !data_selecionada.is_empty() %}
-    <div class="card shadow">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold text-primary">Escala do dia {{ data_selecionada }}</h6>
-            <span class="badge bg-secondary">{{ alocacoes.len() }} Postos Preenchidos</span>
-        </div>
-        <div class="card-body">
-            {% if alocacoes.is_empty() %}
-                <div class="alert alert-warning text-center">
-                    Nenhuma escala encontrada para esta data. Clique em <strong>Gerar Escala</strong> para criar uma nova.
-                </div>
-            {% else %}
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover" width="100%" cellspacing="0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Posto</th>
-                                <th>Militar</th>
-                                <th>Turma</th>
-                                <th>Obs</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for alocacao in alocacoes %}
-                            <tr class="{% if alocacao.is_punicao %}table-danger{% endif %}">
-                                <td class="fw-bold">{{ alocacao.posto }}</td>
-                                <td>{{ alocacao.militar }}</td>
-                                <td>{{ alocacao.turma }}º Ano</td>
-                                <td>
-                                    {% if alocacao.is_punicao %}
-                                        <span class="badge bg-danger">Punição</span>
-                                    {% else %}
-                                        <span class="badge bg-success">Serviço</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="alert('Funcionalidade de troca manual em breve!')">
-                                        <i class="fas fa-exchange-alt"></i> Trocar
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% endif %}
-        </div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="font-size: 1.8em; margin: 0; color: var(--primary-dark);">Escalas de Serviço</h1>
+    {% if is_admin %}
+    <div style="display: flex; gap: 10px;">
+        <button class="btn" onclick="showModal('modalGerar')">Gerar</button>
+        <button class="btn btn-accent" onclick="showModal('modalPublicar')">Publicar</button>
     </div>
     {% endif %}
 </div>
 
+<div class="tab-container">
+    <button class="tab-btn active" onclick="openTab('rascunhos')">Prévias (Trocas)</button>
+    <button class="tab-btn" onclick="openTab('publicadas')">Oficiais</button>
+</div>
+
+<div id="rascunhos" class="tab-content active">
+    {% if dias_rascunho.is_empty() %}
+        <div style="text-align: center; padding: 40px; color: #999;">
+            <p>Nenhuma prévia disponível no momento.</p>
+        </div>
+    {% else %}
+        {% for dia in dias_rascunho %}
+        <div class="day-card" style="border-left: 4px solid #ffc107;">
+            <div class="day-header">
+                <h3 class="day-title">{{ dia.data_formatada }}</h3>
+                {% if dia.tipo == "RD" %}
+                    <span class="day-tag tag-rd">{{ dia.tipo }}</span>
+                {% else %}
+                    <span class="day-tag tag-rn">{{ dia.tipo }}</span>
+                {% endif %}
+            </div>
+            <table>
+                <thead><tr><th width="40%">Posto</th><th>Militar (Clique para Trocar)</th></tr></thead>
+                <tbody>
+                    {% for aloc in dia.alocacoes %}
+                    <tr>
+                        <td><strong>{{ aloc.posto }}</strong></td>
+                        <td class="person-cell" onclick="handleCellClick('{{ aloc.alocacao_id }}', '{{ aloc.posto }}', '{{ aloc.militar }}', '{{ aloc.user_id }}')">
+                            {% if aloc.is_meu %}
+                                <span class="meu-servico">{{ aloc.militar }} (Você)</span>
+                            {% else %}
+                                <span class="{% if aloc.is_punicao %}punicao{% endif %}">{{ aloc.militar }}</span>
+                            {% endif %}
+                            {% if aloc.is_punicao %}<small style="color:#d32f2f;">(Punição)</small>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<div id="publicadas" class="tab-content">
+    {% if dias_publicados.is_empty() %}
+        <div style="text-align: center; padding: 40px; color: #999;">
+            <p>Nenhuma escala oficial publicada.</p>
+        </div>
+    {% else %}
+        {% for dia in dias_publicados %}
+        <div class="day-card" style="border-left: 4px solid var(--success-color);">
+            <div class="day-header">
+                <h3 class="day-title">{{ dia.data_formatada }}</h3>
+                <div>
+                    <span class="day-tag tag-rn" style="background:#e8f5e9; color:#2e7d32;">OFICIAL</span>
+                    {% if is_admin %}
+                    <button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.7em;" onclick="errataDia('{{ dia.data }}')">Errata</button>
+                    {% endif %}
+                </div>
+            </div>
+            <table>
+                <thead><tr><th width="40%">Posto</th><th>Militar</th></tr></thead>
+                <tbody>
+                    {% for aloc in dia.alocacoes %}
+                    <tr>
+                        <td><strong>{{ aloc.posto }}</strong></td>
+                        <td>
+                            {% if aloc.is_meu %}
+                                <strong>{{ aloc.militar }}</strong>
+                            {% else %}
+                                {{ aloc.militar }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<div id="modalTroca" class="modal-overlay">
+    <div class="modal-box">
+        <h2 id="modalTitle" style="margin-top:0; color: var(--primary-color);">Solicitar Troca</h2>
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+            <div style="font-size: 0.9em; color: #757575;">Serviço Alvo:</div>
+            <div id="targetInfo" style="font-weight: 500;"></div>
+        </div>
+        <div id="adminWarning" style="display:none; color: #d32f2f; font-size: 0.9em; margin-bottom: 10px;">⚠️ Modo Escalante: Esta troca será forçada sem aprovação.</div>
+        <input type="hidden" id="trocaAlocacaoId">
+        <label>ID do Substituto:</label>
+        <input type="text" id="trocaSubstituto" placeholder="Ex: 1002">
+        <label>Motivo:</label>
+        <textarea id="trocaMotivo" rows="2" placeholder="Justifique a troca..."></textarea>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button class="btn" style="background: #eee; color: #333;" onclick="closeModal('modalTroca')">Cancelar</button>
+            <button class="btn" onclick="submitTroca()">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalGerar" class="modal-overlay">
+    <div class="modal-box">
+        <h2 style="margin-top:0;">Gerar Período</h2>
+        <label>Início:</label><input type="date" id="genIni">
+        <label>Fim:</label><input type="date" id="genFim">
+        <div style="margin-top: 15px; text-align: right;">
+            <button class="btn" onclick="gerarPeriodo()">Gerar Prévias</button>
+            <button class="btn" style="background: #eee; color: #333;" onclick="closeModal('modalGerar')">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalPublicar" class="modal-overlay">
+    <div class="modal-box">
+        <h2 style="margin-top:0; color: var(--success-color);">Publicar Oficialmente</h2>
+        <p style="font-size: 0.9em;">Transforma rascunhos em oficiais. Bloqueia novas trocas de usuário.</p>
+        <label>Início:</label><input type="date" id="pubIni">
+        <label>Fim:</label><input type="date" id="pubFim">
+        <div style="margin-top: 15px; text-align: right;">
+            <button class="btn btn-accent" onclick="publicarPeriodo()">Publicar</button>
+            <button class="btn" style="background: #eee; color: #333;" onclick="closeModal('modalPublicar')">Fechar</button>
+        </div>
+    </div>
+</div>
+
 <script>
-    async function gerarEscala() {
-        const data = document.getElementById('data').value;
-        const tipo = document.getElementById('tipo').value;
+    const IS_ADMIN = {{ is_admin }};
+    const USER_ATUAL = "{{ user_atual_id }}"; 
 
-        if (!data) return alert("Por favor, selecione uma data.");
+    function openTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        // Correção JS: event.target deve ser passado ou acedido corretamente
+        if(window.event) window.event.currentTarget.classList.add('active');
+    }
 
-        if (!confirm(`Atenção: Isto vai gerar/regenerar a escala para ${data} (${tipo}). Continuar?`)) {
-            return;
+    function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    function handleCellClick(alocId, posto, nome, userId) {
+        document.getElementById('trocaAlocacaoId').value = alocId;
+        document.getElementById('targetInfo').innerText = posto + " - " + nome;
+        document.getElementById('trocaMotivo').value = ""; 
+
+        if (IS_ADMIN) {
+            document.getElementById('modalTitle').innerText = "Troca Obrigatória (TO)";
+            document.getElementById('adminWarning').style.display = 'block';
+            document.getElementById('trocaSubstituto').value = "";
+        } else {
+            document.getElementById('adminWarning').style.display = 'none';
+            if (userId === USER_ATUAL) {
+                document.getElementById('modalTitle').innerText = "Pedir Permuta (Sair)";
+                document.getElementById('trocaSubstituto').value = ""; 
+                document.getElementById('trocaSubstituto').placeholder = "ID de quem te rende";
+            } else {
+                document.getElementById('modalTitle').innerText = "Oferecer Cobertura (Entrar)";
+                document.getElementById('trocaSubstituto').value = USER_ATUAL; 
+            }
         }
+        showModal('modalTroca');
+    }
+
+    async function submitTroca() {
+        const payload = {
+            alocacao_id: document.getElementById('trocaAlocacaoId').value,
+            substituto_id: document.getElementById('trocaSubstituto').value,
+            motivo: document.getElementById('trocaMotivo').value
+        };
+        if(!payload.substituto_id || !payload.motivo) return alert("Preencha todos os campos");
 
         try {
-            // Mostra loading (opcional)
-            document.body.style.cursor = 'wait';
-
-            const response = await fetch('/escala/gerar', {
+            const res = await fetch('/escala/trocas/solicitar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data: data, tipo: tipo })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
             });
+            if(res.ok) { alert("Operação realizada!"); location.reload(); }
+            else { alert("Erro: " + await res.text()); }
+        } catch(e) { alert(e); }
+    }
 
-            const texto = await response.text();
+    async function gerarPeriodo() {
+        const inicio = document.getElementById('genIni').value;
+        const fim = document.getElementById('genFim').value;
+        if(!inicio || !fim) return alert("Datas vazias");
+        
+        const res = await fetch('/escala/gerar_periodo', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ data_inicio: inicio, data_fim: fim })
+        });
+        if(res.ok) location.reload(); else alert(await res.text());
+    }
 
-            if (response.ok) {
-                alert("✅ " + texto);
-                // Recarrega a página para ver os dados novos
-                document.getElementById('formControlo').submit();
-            } else {
-                alert("❌ Erro: " + texto);
-            }
-        } catch (erro) {
-            alert("Erro de conexão: " + erro);
-        } finally {
-            document.body.style.cursor = 'default';
-        }
+    async function publicarPeriodo() {
+        const inicio = document.getElementById('pubIni').value;
+        const fim = document.getElementById('pubFim').value;
+        if(!inicio || !fim) return alert("Datas vazias");
+        
+        const res = await fetch('/escala/publicar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ data_inicio: inicio, data_fim: fim })
+        });
+        if(res.ok) location.reload(); else alert(await res.text());
+    }
+    
+    async function errataDia(data) {
+        if(!confirm("Reabrir dia " + data + "?")) return;
+        const res = await fetch('/escala/errata/' + data, { method: 'POST' });
+        if(res.ok) location.reload(); else alert(await res.text());
     }
 </script>
 {% endblock %}

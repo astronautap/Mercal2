@@ -1,43 +1,93 @@
-{# templates/user_page.html - Herda de layout.html #}
 {% extends "layout.html" %}
 
-{% block title %}Sua Página{% endblock %}
-{% block heading %}Bem-Vindo(a)!{% endblock %}
+{% block head_extra %}
+<style>
+    /* Estilos existentes... */
+    .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 25px; }
+    @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } }
+    .schedule-day { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid #e0e0e0; }
+    .schedule-day:last-child { border-bottom: none; }
+    .date-badge { width: 60px; height: 60px; background-color: #e8eaf6; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 500; color: #303f9f; }
+    .date-badge span:first-child { font-size: 1.4em; font-weight: bold; }
+    .date-badge span:last-child { font-size: 0.8em; text-transform: uppercase; }
 
-{# Adiciona link de Logout na navegação, alinhado à direita #}
-{% block nav %}
-    {# Adiciona link Admin SE for admin #}
-    {% if is_admin %}
-        <a href="admin/users">Gerir Utilizadores</a>
-    {% endif %}
-    {% if can_access_presence %}
-        <a href="/presence">Controlo de Presença</a>
-    {% endif %}
-    <div style="margin-left: auto;"> {# Empurra para a direita #}
-        <a href="/logout">Logout</a>
-    </div>
+    /* Estilo Novo para Trocas */
+    .trade-item { background: #fff8e1; border: 1px solid #ffe0b2; border-radius: 6px; padding: 15px; margin-bottom: 15px; }
+    .trade-actions { display: flex; gap: 10px; margin-top: 10px; }
+    .btn-small { padding: 5px 10px; font-size: 0.8em; }
+</style>
 {% endblock %}
 
 {% block content %}
-    <p>Olá, <strong>{{ user_name }}</strong> (ID: {{ user_id }})!</p>
-    <p>Esta é a sua página pessoal. Ainda está em construção.</p>
+<header style="margin-bottom: 30px;">
+    <h2 style="margin:0;">Bem-vindo(a), {{ name }}!</h2>
+    <p style="color: #757575; margin:0;">Painel do Usuário</p>
+</header>
 
-    <h4>Funcionalidades Futuras:</h4>
-    <ul>
-        <li>Ver meus dados completos</li>
-        <li>Alterar senha</li>
-        {# Adicionar links quando as funcionalidades existirem #}
-        {# <li><a href="/escala">Consultar Escala</a></li> #}
-        {# <li><a href="/refeicoes">Marcar Refeições</a></li> #}
-    </ul>
+<div class="dashboard-grid">
+    <div class="main-column">
+        
+        {% if !trocas_pendentes.is_empty() %}
+        <div class="card" style="border-left: 4px solid #ff9800;">
+            <h2 class="card-title"><span class="icon">🔔</span> Pedidos de Troca Pendentes</h2>
+            
+            {% for troca in trocas_pendentes %}
+            <div class="trade-item">
+                <p style="margin:0 0 5px 0;">
+                    <strong>{{ troca.solicitante }}</strong> pede troca para o dia <strong>{{ troca.data }}</strong>.
+                </p>
+                <p style="margin:0 0 10px 0; color:#666; font-size:0.9em;">
+                    Posto: {{ troca.posto }} <br>
+                    <i>Motivo: {{ troca.motivo }}</i>
+                </p>
+                
+                <div class="trade-actions">
+                    <form action="/user/responder_troca" method="POST">
+                        <input type="hidden" name="troca_id" value="{{ troca.troca_id }}">
+                        <input type="hidden" name="acao" value="aceitar">
+                        <button type="submit" class="btn btn-small" style="background-color:var(--success-color);">✅ Aceitar</button>
+                    </form>
+                    
+                    <form action="/user/responder_troca" method="POST">
+                        <input type="hidden" name="troca_id" value="{{ troca.troca_id }}">
+                        <input type="hidden" name="acao" value="recusar">
+                        <button type="submit" class="btn btn-small btn-danger">❌ Recusar</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
 
-    {# Mostra mensagem se for admin (opcional, já está no nav) #}
-    {% if is_admin %}
-        <p style="color: green; font-weight: bold; margin-top: 20px;">Você tem permissões de Administrador.</p>
-    {% endif %}
-    {% if can_access_presence %}
-    <div class="presence-status-box">
-        {# ... (lógica para mostrar estado) ... #}
+        <div class="card">
+            <h2 class="card-title"><span class="icon">👤</span> Minhas Informações</h2>
+            <p><strong>ID:</strong> {{ user_id }}</p>
+            <div style="margin-top: 20px;">
+                <a href="/escala/" class="btn btn-full">📅 Consultar Escalas / Pedir Troca</a>
+            </div>
+        </div>
     </div>
-    {% endif %}
+
+    <div class="sidebar-column">
+        <div class="card">
+            <h2 class="card-title"><span class="icon">📅</span> Meus Serviços</h2>
+            {% if meus_servicos.is_empty() %}
+                <p style="color: #757575;">Nenhum serviço previsto nos próximos dias.</p>
+            {% else %}
+                {% for servico in meus_servicos %}
+                <div class="schedule-day">
+                    <div class="date-badge">
+                        <span>{{ servico.dia_mes }}</span>
+                        <span>{{ servico.mes_extenso }}</span>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold;">{{ servico.posto }}</div>
+                        <div style="font-size: 0.9em; color: #757575;">{{ servico.dia_semana }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}

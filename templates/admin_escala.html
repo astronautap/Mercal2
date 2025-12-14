@@ -1,0 +1,155 @@
+{% extends "layout.html" %}
+
+{% block head_extra %}
+<style>
+    /* Estilo "Old School Mercal" */
+    .admin-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: 30px;
+        margin-top: 20px;
+    }
+    
+    .action-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 30px;
+        transition: transform 0.2s;
+    }
+    .action-card:hover { transform: translateY(-2px); }
+
+    .card-icon { font-size: 2.5em; margin-bottom: 15px; display: block; }
+    .card-title { font-size: 1.5em; font-weight: 500; margin: 0 0 10px 0; color: #333; }
+    .card-desc { color: #666; margin-bottom: 25px; min-height: 40px; }
+
+    /* Inputs bonitos */
+    .input-group { margin-bottom: 15px; }
+    .input-group label { display: block; color: #555; margin-bottom: 5px; font-weight: 500; }
+    .input-group input { 
+        width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; 
+        font-size: 16px; box-sizing: border-box;
+    }
+
+    /* Cores Específicas */
+    .btn-generate { background-color: #3f51b5; color: white; width: 100%; }
+    .btn-publish { background-color: #4caf50; color: white; width: 100%; }
+    .btn-danger { background-color: #f44336; color: white; width: 100%; }
+    
+    .header-box {
+        background: white; padding: 20px; border-radius: 8px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="header-box">
+    <div>
+        <h1 style="margin:0; font-size:1.8em; color:#303f9f;">Painel do Escalante</h1>
+        <p style="margin:5px 0 0 0; color:#777;">Gestão técnica das escalas de serviço</p>
+    </div>
+    <div>
+        <a href="/escala/" class="btn" style="background:#eee; color:#333;">👁️ Ver Escala Final</a>
+    </div>
+</div>
+
+<div class="admin-grid">
+
+    <div class="action-card">
+        <span class="card-icon" style="color: #3f51b5;">⚙️</span>
+        <h2 class="card-title">Gerar Prévias</h2>
+        <p class="card-desc">O algoritmo preenche os postos. Cria escalas em estado "Rascunho" (Amarelo).</p>
+        
+        <div class="input-group">
+            <label>Data Início</label>
+            <input type="date" id="genIni">
+        </div>
+        <div class="input-group">
+            <label>Data Fim</label>
+            <input type="date" id="genFim">
+        </div>
+        <button class="btn btn-generate" onclick="executarAcao('gerar')">🚀 Gerar Lote</button>
+    </div>
+
+    <div class="action-card">
+        <span class="card-icon" style="color: #4caf50;">📢</span>
+        <h2 class="card-title">Publicar / Lançar</h2>
+        <p class="card-desc">Torna oficial. Bloqueia trocas automáticas e notifica (futuramente) os usuários.</p>
+        
+        <div class="input-group">
+            <label>Data Início</label>
+            <input type="date" id="pubIni">
+        </div>
+        <div class="input-group">
+            <label>Data Fim</label>
+            <input type="date" id="pubFim">
+        </div>
+        <button class="btn btn-publish" onclick="executarAcao('publicar')">✅ Tornar Oficial</button>
+    </div>
+
+    <div class="action-card">
+        <span class="card-icon" style="color: #f44336;">🔧</span>
+        <h2 class="card-title">Errata de Dia</h2>
+        <p class="card-desc">Reabre um dia "Publicado" para "Rascunho", permitindo edições manuais.</p>
+        
+        <div class="input-group">
+            <label>Data Específica</label>
+            <input type="date" id="errataData">
+        </div>
+        <div style="height: 74px;"></div> <button class="btn btn-danger" onclick="executarAcao('errata')">🔓 Reabrir Dia</button>
+    </div>
+</div>
+
+<script>
+    async function executarAcao(tipo) {
+        let url, payload;
+        
+        if (tipo === 'gerar') {
+            const i = document.getElementById('genIni').value;
+            const f = document.getElementById('genFim').value;
+            if(!i || !f) return alert("Preencha as datas.");
+            if(!confirm(`Gerar rascunhos de ${i} a ${f}? Isso substituirá rascunhos existentes.`)) return;
+            
+            url = '/escala/gerar_periodo';
+            payload = { data_inicio: i, data_fim: f };
+
+        } else if (tipo === 'publicar') {
+            const i = document.getElementById('pubIni').value;
+            const f = document.getElementById('pubFim').value;
+            if(!i || !f) return alert("Preencha as datas.");
+            if(!confirm(`ATENÇÃO: Publicar de ${i} a ${f}? Isso torna a escala OFICIAL.`)) return;
+            
+            url = '/escala/publicar';
+            payload = { data_inicio: i, data_fim: f };
+
+        } else if (tipo === 'errata') {
+            const d = document.getElementById('errataData').value;
+            if(!d) return alert("Preencha a data.");
+            if(!confirm(`Reabrir o dia ${d}? Ele voltará a ser Rascunho.`)) return;
+            
+            // Errata é um POST na URL específica, sem JSON body
+            try {
+                const res = await fetch(`/escala/errata/${d}`, { method: 'POST' });
+                if(res.ok) alert("Sucesso! Dia reaberto.");
+                else alert("Erro: " + await res.text());
+                return;
+            } catch(e) { return alert(e); }
+        }
+
+        // Fetch genérico para Gerar e Publicar
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            const texto = await res.text();
+            if(res.ok) alert("✅ " + texto);
+            else alert("❌ Erro: " + texto);
+        } catch(e) { alert("Erro de rede: " + e); }
+    }
+</script>
+{% endblock %}
