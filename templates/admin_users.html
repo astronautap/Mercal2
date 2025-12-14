@@ -1,0 +1,115 @@
+{# templates/admin_users.html - Herda de layout.html #}
+{% extends "layout.html" %}
+
+{% block title %}Admin - Utilizadores{% endblock %}
+{% block heading %}Gestão de Utilizadores{% endblock %}
+
+{% block nav %}
+    <a href="/user">Minha Página</a> {# Link para voltar #}
+    <div style="margin-left: auto;">
+        <a href="/logout">Logout</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {# Mensagens de feedback (sucesso/erro) - passadas pela struct Askama #}
+    {% if let Some(success_msg) = success_message %}
+        <p class="success-message">{{ success_msg }}</p> {# Precisa definir estilo .success-message no CSS #}
+    {% endif %}
+    {% if let Some(error_msg) = error_message %}
+        <p class="error-message">{{ error_msg }}</p>
+    {% endif %}
+
+    {# Secção: Criar Novo Utilizador #}
+    <section class="admin-section">
+        <h2>Criar Novo Utilizador</h2>
+        <form method="post" action="/admin/users/create" class="user-form">
+            <div><label for="create-id">ID:</label><input type="text" id="create-id" name="id" required maxlength="10"></div>
+            <div><label for="create-name">Nome:</label><input type="text" id="create-name" name="name" required></div>
+            <div><label for="create-password">Senha:</label><input type="password" id="create-password" name="password" required minlength="4"></div>
+            <div><label for="create-turma">Turma:</label><input type="text" id="create-turma" name="turma" required></div>
+            <div><label for="create-ano">Ano:</label><input type="number" id="create-ano" name="ano" required min="1" max="5"></div>
+            <div><label for="create-curso">Curso:</label><input type="text" id="create-curso" name="curso" required maxlength="10"></div>
+            <div><label for="create-genero">Gênero:</label>
+                <select id="create-genero" name="genero">
+                    <option value="M">Masculino</option>
+                    <option value="F">Feminino</option>
+                </select>
+            </div>
+            {# Seleção de Roles (simples, checkboxes) #}
+            <div><label>Roles:</label>
+                <label><input type="checkbox" name="roles" value="admin"> Admin</label>
+                <label><input type="checkbox" name="roles" value="rancheiro"> Rancheiro</label>
+                <label><input type="checkbox" name="roles" value="escalante"> Escalante</label>
+                {# Adicionar outras roles relevantes #}
+            </div>
+            <button type="submit">Criar Utilizador</button>
+        </form>
+    </section>
+
+    {# Secção: Alterar Senha #}
+    <section class="admin-section">
+        <h2>Alterar Senha</h2>
+        <form method="post" action="/admin/users/change_password" class="user-form">
+            <div><label for="change-id">ID do Utilizador:</label><input type="text" id="change-id" name="id" required></div>
+            <div><label for="change-password">Nova Senha:</label><input type="password" id="change-password" name="new_password" required minlength="4"></div>
+            <button type="submit">Alterar Senha</button>
+        </form>
+    </section>
+
+    {# Secção: Listar Utilizadores #}
+    <section class="admin-section">
+    <h2>Utilizadores Registados</h2>
+    {% if users.is_empty() %}
+        <p>Nenhum utilizador registado.</p>
+    {% else %}
+        <table class="user-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Turma</th>
+                    <th>Ano</th>
+                    <th>Curso</th>
+                    <th>Gênero</th>
+                    <th>Roles</th>
+                    <th>Ações</th> {# <-- Nova Coluna #}
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.name }}</td>
+                    <td>{{ user.turma }}</td>
+                    <td>{{ user.ano }}</td>
+                    <td>{{ user.curso }}</td>
+                    <td>{{ user.genero }}</td>
+                    <td>{{ user.roles.join(", ") }}</td>
+                    {# <<< ADICIONADO: Link de Edição >>> #}
+                    <td><a href="/admin/users/edit/{{ user.id }}" class="edit-link">Editar</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</section>
+
+    {# Adicionar CSS para .admin-section, .user-form, .user-table, .success-message #}
+    <style>
+        .admin-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .admin-section h2 { margin-top: 0; color: #333; }
+        .user-form div { margin-bottom: 15px; }
+        .user-form label { display: inline-block; width: 100px; vertical-align: top; }
+        .user-form input[type="text"],
+        .user-form input[type="password"],
+        .user-form input[type="number"],
+        .user-form select { width: 250px; padding: 8px; }
+        .user-form label input[type="checkbox"] { margin-right: 5px; }
+        .user-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .user-table th, .user-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .user-table th { background-color: #f2f2f2; }
+        .success-message { color: green; background-color: #e0f2e0; border: 1px solid green; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+    </style>
+
+{% endblock %}

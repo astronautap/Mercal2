@@ -1,0 +1,43 @@
+{# templates/user_page.html - Herda de layout.html #}
+{% extends "layout.html" %}
+
+{% block title %}Sua Página{% endblock %}
+{% block heading %}Bem-Vindo(a)!{% endblock %}
+
+{# Adiciona link de Logout na navegação, alinhado à direita #}
+{% block nav %}
+    {# Adiciona link Admin SE for admin #}
+    {% if is_admin %}
+        <a href="admin/users">Gerir Utilizadores</a>
+    {% endif %}
+    {% if can_access_presence %}
+        <a href="/presence">Controlo de Presença</a>
+    {% endif %}
+    <div style="margin-left: auto;"> {# Empurra para a direita #}
+        <a href="/logout">Logout</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <p>Olá, <strong>{{ user_name }}</strong> (ID: {{ user_id }})!</p>
+    <p>Esta é a sua página pessoal. Ainda está em construção.</p>
+
+    <h4>Funcionalidades Futuras:</h4>
+    <ul>
+        <li>Ver meus dados completos</li>
+        <li>Alterar senha</li>
+        {# Adicionar links quando as funcionalidades existirem #}
+        {# <li><a href="/escala">Consultar Escala</a></li> #}
+        {# <li><a href="/refeicoes">Marcar Refeições</a></li> #}
+    </ul>
+
+    {# Mostra mensagem se for admin (opcional, já está no nav) #}
+    {% if is_admin %}
+        <p style="color: green; font-weight: bold; margin-top: 20px;">Você tem permissões de Administrador.</p>
+    {% endif %}
+    {% if can_access_presence %}
+    <div class="presence-status-box">
+        {# ... (lógica para mostrar estado) ... #}
+    </div>
+    {% endif %}
+{% endblock %}

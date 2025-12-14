@@ -1,0 +1,84 @@
+{# templates/admin_edit_user.html - Herda de layout.html #}
+{% extends "layout.html" %}
+
+{% block title %}Editar Utilizador{% if let Some(u) = user %} - {{ u.id }}{% endif %}{% endblock %}
+{% block heading %}Editar Utilizador{% if let Some(u) = user %}: {{ u.id }}{% endif %}{% endblock %}
+
+{% block nav %}
+    <a href="/admin/users">Voltar para Lista</a>
+    <div style="margin-left: auto;">
+        <a href="/logout">Logout</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    {% if let Some(error_msg) = error_message %}
+        <p class="error-message">{{ error_msg }}</p>
+        <p><a href="/admin/users">Voltar para a lista</a></p>
+
+    {% else if let Some(user) = user %}
+        <form method="post" action="/admin/users/edit/{{ user.id }}" class="user-form edit-form">
+            <div class="form-group readonly">
+                <label>ID:</label>
+                <span>{{ user.id }}</span>
+            </div>
+
+            <div class="form-group">
+                <label for="edit-name">Nome:</label>
+                <input type="text" id="edit-name" name="name" value="{{ user.name }}" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-turma">Turma:</label>
+                <input type="text" id="edit-turma" name="turma" value="{{ user.turma }}" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-ano">Ano:</label>
+                <input type="number" id="edit-ano" name="ano" value="{{ user.ano }}" required min="1" max="5">
+            </div>
+            <div class="form-group">
+                <label for="edit-curso">Curso:</label>
+                <input type="text" id="edit-curso" name="curso" value="{{ user.curso }}" required maxlength="10">
+            </div>
+            <div class="form-group">
+                <label for="edit-genero">Gênero:</label>
+                <select id="edit-genero" name="genero">
+                    <option value="M" {% if user.genero == "M" %}selected{% endif %}>Masculino</option>
+                    <option value="F" {% if user.genero == "F" %}selected{% endif %}>Feminino</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Roles Permanentes:</label>
+                <div class="roles-checkboxes">
+                    {% for defined_role in all_defined_roles %}
+                        <label>
+                            <input type="checkbox" name="roles" value="{{ defined_role }}" {% if self.has_role(defined_role) %}checked{% endif %}>
+                            {{ defined_role }}
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit">Guardar Alterações</button>
+                <a href="/admin/users" class="cancel-link">Cancelar</a>
+            </div>
+        </form>
+    {% else %}
+        <p class="error-message">Não foi possível carregar os dados do utilizador.</p>
+        <p><a href="/admin/users">Voltar para a lista</a></p>
+    {% endif %}
+
+    <style>
+        .edit-form .form-group { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-bottom: 15px; align-items: center; }
+        .edit-form label { font-weight: 500; text-align: right; }
+        .edit-form input, .edit-form select { width: 100%; max-width: 350px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .edit-form .readonly span { font-weight: bold; padding: 8px 0; }
+        .edit-form .roles-checkboxes { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; padding: 8px 0; }
+        .edit-form .roles-checkboxes label { width: auto; text-align: left; display: flex; align-items: center; gap: 5px; font-weight: normal;}
+        .edit-form .roles-checkboxes input { width: auto; margin-bottom: 0; }
+        .edit-form .form-actions { grid-column: 2 / 3; display: flex; gap: 10px; margin-top: 20px; }
+        .cancel-link { display: inline-block; padding: 10px 15px; color: #555; text-decoration: none; border: 1px solid #ccc; border-radius: 4px; }
+        .cancel-link:hover { background-color: #f0f0f0; }
+    </style>
+{% endblock %}

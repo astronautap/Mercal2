@@ -1,0 +1,293 @@
+{# templates/presence.html - Herda de layout.html #}
+{% extends "layout.html" %}
+
+{% block title %}Controlo de Presença{% endblock %}
+{% block heading %}Controlo de Presença{% endblock %}
+
+{# Adiciona links para voltar e Logout #}
+{% block nav %}
+    <a href="/user">Minha Página</a> {# Ou /dashboard se existir #}
+    <div style="margin-left: auto;">
+        <a href="/logout">Logout</a>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div class="presence-container">
+    {# Barra de seleção de Turma #}
+    <div class="turma-selector">
+        <span>Turma:</span>
+        {# Links para cada turma (ex: 1 a 3) #}
+        {% for i in 1..=3 %} {# Assumindo 4 anos/turmas #}
+            {% if i == turma_selecionada %}
+                <span class="turma-link active">{{ i }}º Ano</span>
+            {% else %}
+                {# O link aponta para a mesma página (/presence) mas com ?turma=i #}
+                <a href="/presence?turma={{ i }}" class="turma-link">{{ i }}º Ano</a>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    {# Exibição das Estatísticas #}
+    <div class="stats-bar" id="stats-bar">
+        <span>Total: <strong id="stat-total">{{ stats.total }}</strong></span>
+        <span>A Bordo: <strong id="stat-dentro">{{ stats.dentro }}</strong></span>
+        <span>Fora: <strong id="stat-fora">{{ stats.fora }}</strong></span>
+    </div>
+
+    {# Tabela de Utilizadores #}
+    <table class="presence-table" id="presence-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Última Saída</th>
+                <th>Último Retorno</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Loop sobre a lista de pessoas passada pelo handler #}
+            {% for p in pessoas %}
+            {# Classe CSS definida usando {% if %} do Askama #}
+            <tr id="user-{{ p.id }}" class="{% if p.esta_fora %}fora{% else %}abordo{% endif %}">
+                <td>{{ p.id }}</td>
+                <td>{{ p.nome }}</td>
+                {# Formatação de Option<DateTime<Local>> usando {% match %} #}
+                <td class="col-saida">
+                    <span class="datetime">
+                        {% match p.ultima_saida %}
+                            {% when Some with (dt) %}{{ dt.format("%d/%m %H:%M") }} {# Formato DD/MM HH:MM #}
+                            {% when None %}--- {# Se for None #}
+                        {% endmatch %}
+                    </span>
+                    {# Formatação de Option<String> (operador) #}
+                    <span class="operator">{{ p.usuario_saida.as_deref().unwrap_or("") }}</span>
+                </td>
+                <td class="col-retorno">
+                     <span class="datetime">
+                        {% match p.ultimo_retorno %}
+                            {% when Some with (dt) %}{{ dt.format("%d/%m %H:%M") }}
+                            {% when None %}---
+                        {% endmatch %}
+                     </span>
+                     <span class="operator">{{ p.usuario_retorno.as_deref().unwrap_or("") }}</span>
+                </td>
+                <td class="col-acoes">
+                    {# Estado 'disabled' definido usando {% if %} do Askama #}
+                    <button class="btn-saida" onclick="marcar('saida', '{{ p.id }}')" {% if p.esta_fora %}disabled{% endif %}>L</button>
+                    <button class="btn-retorno" onclick="marcar('retorno', '{{ p.id }}')" {% if !p.esta_fora %}disabled{% endif %}>R</button>
+                </td>
+            </tr>
+            {% endfor %}
+
+            {# Mensagem se a lista de pessoas estiver vazia #}
+            {% if pessoas.is_empty() %}
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 20px;">Nenhum utilizador encontrado para esta turma.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+{# Indicador visual de status da conexão WebSocket #}
+<div id="ws-status" style="position: fixed; bottom: 10px; right: 10px; background-color: #eee; padding: 5px 10px; border-radius: 4px; font-size: 0.8em; border: 1px solid #ccc;">
+    Ligando ao servidor...
+</div>
+{% endblock %}
+
+
+{# Adiciona CSS específico para esta página #}
+{% block head_extra %}
+<style>
+    /* Estilos gerais para a página de presença */
+    .presence-container { /* Adicionar margens se necessário */ }
+    .turma-selector { margin-bottom: 20px; background-color: #f0f0f0; padding: 10px 15px; border-radius: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid #ddd; }
+    .turma-selector span:first-child { font-weight: 500; margin-right: 10px; color: #333;}
+    .turma-link { text-decoration: none; color: #007bff; background-color: #fff; padding: 6px 12px; border-radius: 4px; border: 1px solid #ccc; transition: background-color 0.2s, color 0.2s, border-color 0.2s; white-space: nowrap; }
+    .turma-link:hover { background-color: #e9ecef; border-color: #bbb;}
+    .turma-link.active { background-color: #007bff; color: white; font-weight: bold; border-color: #007bff;}
+    .stats-bar { display: flex; justify-content: space-around; background-color: #e9ecef; padding: 15px; border-radius: 4px; margin-bottom: 20px; font-size: 1.1em; border: 1px solid #ddd; }
+    .stats-bar span { color: #495057; }
+    .stats-bar strong { color: #000; margin-left: 5px; }
+    .presence-table { width: 100%; border-collapse: collapse; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 5px; overflow: hidden; background-color: #fff; border: 1px solid #dee2e6; }
+    .presence-table th, .presence-table td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; vertical-align: middle; }
+    .presence-table th { background-color: #f8f9fa; font-weight: 500; color: #495057; white-space: nowrap; }
+    .presence-table tbody tr:nth-child(even) { background-color: #f9f9f9; }
+    .presence-table tbody tr:hover { background-color: #f1f1f1; } /* Feedback visual ao passar o mouse */
+    /* Indicador visual na primeira célula */
+    .presence-table tbody td:first-child { position: relative; padding-left: 25px; }
+    .presence-table tbody td:first-child::before {
+        content: ''; width: 10px; height: 10px; border-radius: 50%;
+        position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+    }
+    .presence-table tbody tr.fora td:first-child::before { background-color: #dc3545; /* Vermelho para 'fora' */ }
+    .presence-table tbody tr.abordo td:first-child::before { background-color: #28a745; /* Verde para 'abordo' */ }
+    /* Estilo para botões desabilitados */
+    .presence-table tbody tr.fora .btn-saida { background-color: #6c757d; cursor: not-allowed; }
+    .presence-table tbody tr.abordo .btn-retorno { background-color: #6c757d; cursor: not-allowed; }
+
+    .col-saida, .col-retorno { font-size: 0.9em; min-width: 130px; }
+    .col-saida .datetime, .col-retorno .datetime { font-weight: 500; }
+    .col-saida .operator, .col-retorno .operator { display: block; color: #6c757d; font-size: 0.8em; margin-top: 2px;}
+    .col-acoes { text-align: center; width: 100px; }
+    .col-acoes button { padding: 6px 12px; margin: 0 3px; cursor: pointer; border: none; border-radius: 4px; color: white; font-weight: bold; font-size: 1em; transition: background-color 0.2s ease; }
+    .btn-saida { background-color: #dc3545; } /* Vermelho */
+    .btn-retorno { background-color: #28a745; } /* Verde */
+    .btn-saida:hover:not(:disabled) { background-color: #c82333; }
+    .btn-retorno:hover:not(:disabled) { background-color: #218838; }
+    .btn-saida:disabled, .btn-retorno:disabled { background-color: #adb5bd; cursor: not-allowed; opacity: 0.7; }
+
+    /* Estilos para o status do WebSocket */
+    #ws-status { transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease; }
+    #ws-status.connected { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+    #ws-status.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+</style>
+{% endblock %}
+
+{# Adiciona o JavaScript no final #}
+{% block scripts %}
+<script>
+    // --- Lógica WebSocket ---
+    let socket;
+    const wsStatusDiv = document.getElementById('ws-status');
+    // Armazena a turma atual (obtida do URL ou default) para verificar updates
+    const currentTurma = parseInt(new URLSearchParams(window.location.search).get('turma') || '1', 10);
+
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const wsUrl = `${protocol}//${host}/presence/ws`; // Rota do WebSocket
+
+        console.log(`Tentando conectar a: ${wsUrl}`);
+        if(wsStatusDiv) {
+            wsStatusDiv.textContent = 'Ligando...';
+            wsStatusDiv.className = '';
+        }
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = function(event) {
+            console.log("WebSocket conectado!");
+            if(wsStatusDiv) {
+                wsStatusDiv.textContent = 'Ligado';
+                wsStatusDiv.className = 'connected';
+            }
+        };
+
+        socket.onmessage = function(event) {
+            console.log("Mensagem recebida:", event.data);
+            try {
+                const update = JSON.parse(event.data); // Espera JSON PresenceSocketUpdate
+
+                // Atualiza a linha do utilizador correspondente, se existir na página
+                if (update.user_id) {
+                    const row = document.getElementById(`user-${update.user_id}`);
+                    if (row) {
+                        // 1. Atualiza classe da linha (abordo/fora)
+                        row.className = update.esta_fora ? 'fora' : 'abordo';
+
+                        // 2. Atualiza colunas de data/hora/operador (com HTML do servidor)
+                        const saidaCell = row.querySelector('.col-saida');
+                        const retornoCell = row.querySelector('.col-retorno');
+                        if (saidaCell) saidaCell.innerHTML = update.saida_info_html || '---';
+                        if (retornoCell) retornoCell.innerHTML = update.retorno_info_html || '---';
+
+                        // 3. Atualiza estado (disabled) dos botões L/R
+                        const btnSaida = row.querySelector('.btn-saida');
+                        const btnRetorno = row.querySelector('.btn-retorno');
+                        if (btnSaida) btnSaida.disabled = update.esta_fora;
+                        if (btnRetorno) btnRetorno.disabled = !update.esta_fora;
+                    }
+                }
+
+                // 4. Atualiza estatísticas GLOBAIS (se o update for para a turma atual)
+                //    (Assumindo que o servidor adicionará 'turma_afetada' ao update)
+                //    Por agora, vamos atualizar SEMPRE que recebermos stats.
+                if (update.stats) {
+                    // Idealmente: if (update.stats && update.turma_afetada == currentTurma) { ... }
+                     document.getElementById('stat-total').textContent = update.stats.total;
+                     document.getElementById('stat-dentro').textContent = update.stats.dentro;
+                     document.getElementById('stat-fora').textContent = update.stats.fora;
+                }
+
+
+                // Mostra mensagem de erro se a ação falhou
+                if (update.message && !update.success) {
+                     // Evita alert para não interromper, talvez usar uma notificação mais subtil?
+                     console.error(`Erro ao marcar ${update.user_id || 'desconhecido'}: ${update.message}`);
+                     // Exemplo: Mostrar erro perto do status WS
+                     if(wsStatusDiv) {
+                         wsStatusDiv.textContent = `Erro: ${update.message}`;
+                         wsStatusDiv.className = 'error';
+                         // Limpar mensagem após alguns segundos
+                         setTimeout(() => {
+                             if (socket && socket.readyState === WebSocket.OPEN) {
+                                wsStatusDiv.textContent = 'Ligado';
+                                wsStatusDiv.className = 'connected';
+                             } else if (socket && socket.readyState !== WebSocket.CLOSED) {
+                                wsStatusDiv.textContent = 'Ligando...';
+                                wsStatusDiv.className = '';
+                             }
+                         }, 3000);
+                     }
+                }
+
+            } catch (e) {
+                console.error("Erro ao processar mensagem WebSocket:", e, "Data:", event.data);
+            }
+        };
+
+        socket.onerror = function(event) {
+            console.error("Erro WebSocket:", event);
+            if(wsStatusDiv) {
+                wsStatusDiv.textContent = 'Erro de Ligação';
+                wsStatusDiv.className = 'error';
+            }
+        };
+
+        socket.onclose = function(event) {
+            console.log("WebSocket desconectado. Tentando reconectar em 5s...", event.code, event.reason);
+             if(wsStatusDiv) {
+                 wsStatusDiv.textContent = 'Desligado. Reconectando...';
+                 wsStatusDiv.className = 'error';
+             }
+            // Não reconectar automaticamente se o fecho foi limpo (código 1000 ou 1001)
+            if (event.code !== 1000 && event.code !== 1001) {
+                setTimeout(connectWebSocket, 5000); // Tenta reconectar após 5 segundos
+            } else {
+                 if(wsStatusDiv) { wsStatusDiv.textContent = 'Desligado.'; }
+            }
+        };
+    }
+
+    // Função chamada pelos botões L/R para enviar a ação via WebSocket
+    function marcar(action, userId) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            const message = JSON.stringify({ action: action, user_id: userId });
+            console.log("Enviando:", message);
+            socket.send(message);
+
+            // Desabilitar ambos os botões temporariamente como feedback visual imediato
+            const row = document.getElementById(`user-${userId}`);
+            if (row) {
+                row.querySelectorAll('.col-acoes button').forEach(btn => btn.disabled = true);
+                // O servidor enviará a atualização que reabilitará o botão correto
+            }
+
+        } else {
+            alert("Não foi possível enviar a marcação. Verifique a ligação com o servidor.");
+            console.error("WebSocket não está aberto. Estado:", socket ? socket.readyState : 'Não inicializado');
+             if(wsStatusDiv) {
+                 wsStatusDiv.textContent = 'Erro de Ligação';
+                 wsStatusDiv.className = 'error';
+             }
+        }
+    }
+
+    // Inicia a conexão WebSocket quando a página carrega
+    document.addEventListener('DOMContentLoaded', connectWebSocket);
+
+</script>
+{% endblock %}

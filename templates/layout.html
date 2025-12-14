@@ -1,0 +1,37 @@
+{# templates/layout.html #}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Merca Simples{% endblock %}</title>
+    {# Estilos básicos inline para simplicidade inicial #}
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 15px; background-color: #f9f9f9; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #0056b3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        nav { margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+        nav a { margin-right: 15px; text-decoration: none; color: #007bff; font-weight: 500; }
+        nav a:hover { text-decoration: underline; }
+        .error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        input[type="text"], input[type="password"] { display: block; width: 95%; max-width: 300px; margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        button { padding: 10px 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 1em; }
+        button:hover { background-color: #0056b3; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+         <nav>
+            {# Link "Início" sempre aponta para a raiz (que redireciona para login se não logado) #}
+            <a href="/">Início</a>
+            {# Bloco para adicionar links dinâmicos (Login/Logout/User) #}
+            {% block nav %}{% endblock %}
+        </nav>
+        <h1>{% block heading %}{% endblock %}</h1> {# Título principal da página #}
+        {% block content %}{% endblock %} {# Conteúdo específico da página #}
+    </div>
+    {% block scripts %}{% endblock %} {# Para JS, se necessário #}
+</body>
+</html>

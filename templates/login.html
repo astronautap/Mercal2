@@ -1,0 +1,29 @@
+{# templates/login.html - Usa o layout.html como base #}
+{% extends "layout.html" %}
+
+{# Define o título que aparecerá na aba do navegador #}
+{% block title %}Login{% endblock %}
+
+{# Define o título principal a ser exibido na página #}
+{% block heading %}Acesso ao Sistema{% endblock %}
+
+{# Define o conteúdo específico da página de login #}
+{% block content %}
+    {# Mostra a mensagem de erro, se existir (passada pela struct LoginPage) #}
+    {% if let Some(err_msg) = error %}
+        <p class="error">{{ err_msg }}</p>
+    {% endif %}
+
+    {# Formulário que envia os dados via POST para a rota /login #}
+    <form method="post" action="/login">
+        <div>
+            <label for="username">ID Utilizador:</label>
+            <input type="text" id="username" name="username" required maxlength="10"> {# Aumentar maxlength se necessário #}
+        </div>
+        <div>
+            <label for="password">Senha:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit">Entrar</button>
+    </form>
+{% endblock %}
