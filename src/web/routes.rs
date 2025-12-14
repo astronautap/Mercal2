@@ -2,7 +2,7 @@
 use crate::{
     state::AppState,
     // Adicionar presence_handlers
-    web::{admin_handlers, auth_handlers, mw_auth, mw_admin, mw_presence, presence_handlers, user_handlers},
+    web::{admin_handlers, auth_handlers, mw_auth, mw_admin, mw_presence, presence_handlers, user_handlers, escala_handlers},
 };
 use axum::{
     middleware,
@@ -44,6 +44,17 @@ pub fn create_router(app_state: AppState) -> Router {
             mw_presence::require_presence_access,
         ));
 
+    let escala_routes = Router::new()
+        // Gera a escala (JSON: { "data": "2025-10-25", "tipo": "RN" })
+        .route("/gerar", post(escala_handlers::handle_gerar_escala))
+        .route("/", get(escala_handlers::handle_pagina_escala))
+        // Aprova troca (URL: /escala/trocas/{id}/aprovar)
+        .route("/trocas/{id}/aprovar", post(escala_handlers::handle_aprovar_troca))
+        // Vê a escala (URL: /escala/ver?data=2025-10-25)
+        .route("/ver", get(escala_handlers::handle_ver_escala));
+        // Aqui você pode adicionar um middleware de Admin se quiser proteger estas ações
+        // .route_layer(middleware::from_fn_with_state(app_state.clone(), mw_admin::require_admin));
+
 
     // --- Rotas Autenticadas (Combinando tudo) ---
     // Exigem *pelo menos* login
@@ -54,6 +65,7 @@ pub fn create_router(app_state: AppState) -> Router {
 
         // Aninha as rotas de admin sob /admin
         .nest("/admin", admin_routes)
+        .nest("/escala", escala_routes)
         // *** ALTERADO: Aninha as rotas de presença sob /presence ***
         .nest("/presence", presence_routes)
 

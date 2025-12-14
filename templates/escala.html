@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="h3 mb-0 text-gray-800">📅 Gestão de Escalas</h2>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Controlo de Serviço</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="/escala/" class="row g-3 align-items-end" id="formControlo">
+                
+                <div class="col-md-3">
+                    <label for="data" class="form-label">Data</label>
+                    <input type="date" class="form-control" id="data" name="data" 
+                           value="{{ data_selecionada }}" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label for="tipo" class="form-label">Tipo de Rotina</label>
+                    <select class="form-select" id="tipo" name="tipo">
+                        <option value="RN" {% if tipo_selecionado == "RN" %}selected{% endif %}>Rotina Normal (Preta)</option>
+                        <option value="RD" {% if tipo_selecionado == "RD" %}selected{% endif %}>Domingo/Feriado (Vermelha)</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Consultar
+                    </button>
+
+                    <button type="button" onclick="gerarEscala()" class="btn btn-danger">
+                        <i class="fas fa-cogs"></i> Gerar Escala
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if !data_selecionada.is_empty() %}
+    <div class="card shadow">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">Escala do dia {{ data_selecionada }}</h6>
+            <span class="badge bg-secondary">{{ alocacoes.len() }} Postos Preenchidos</span>
+        </div>
+        <div class="card-body">
+            {% if alocacoes.is_empty() %}
+                <div class="alert alert-warning text-center">
+                    Nenhuma escala encontrada para esta data. Clique em <strong>Gerar Escala</strong> para criar uma nova.
+                </div>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Posto</th>
+                                <th>Militar</th>
+                                <th>Turma</th>
+                                <th>Obs</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alocacao in alocacoes %}
+                            <tr class="{% if alocacao.is_punicao %}table-danger{% endif %}">
+                                <td class="fw-bold">{{ alocacao.posto }}</td>
+                                <td>{{ alocacao.militar }}</td>
+                                <td>{{ alocacao.turma }}º Ano</td>
+                                <td>
+                                    {% if alocacao.is_punicao %}
+                                        <span class="badge bg-danger">Punição</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Serviço</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="alert('Funcionalidade de troca manual em breve!')">
+                                        <i class="fas fa-exchange-alt"></i> Trocar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    async function gerarEscala() {
+        const data = document.getElementById('data').value;
+        const tipo = document.getElementById('tipo').value;
+
+        if (!data) return alert("Por favor, selecione uma data.");
+
+        if (!confirm(`Atenção: Isto vai gerar/regenerar a escala para ${data} (${tipo}). Continuar?`)) {
+            return;
+        }
+
+        try {
+            // Mostra loading (opcional)
+            document.body.style.cursor = 'wait';
+
+            const response = await fetch('/escala/gerar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: data, tipo: tipo })
+            });
+
+            const texto = await response.text();
+
+            if (response.ok) {
+                alert("✅ " + texto);
+                // Recarrega a página para ver os dados novos
+                document.getElementById('formControlo').submit();
+            } else {
+                alert("❌ Erro: " + texto);
+            }
+        } catch (erro) {
+            alert("Erro de conexão: " + erro);
+        } finally {
+            document.body.style.cursor = 'default';
+        }
+    }
+</script>
+{% endblock %}
