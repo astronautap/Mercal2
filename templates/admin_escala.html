@@ -41,6 +41,18 @@
         box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;
         display: flex; justify-content: space-between; align-items: center;
     }
+
+    .data-section { margin-top: 40px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .section-title { color: #303f9f; margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+    
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { text-align: left; padding: 12px; background: #f8f9fa; color: #555; border-bottom: 2px solid #ddd; }
+    .data-table td { padding: 12px; border-bottom: 1px solid #eee; }
+    .data-table tr:hover { background-color: #f5f5f5; }
+    
+    .badge-punicao { background: #ffebee; color: #c62828; padding: 4px 8px; border-radius: 12px; font-weight: bold; font-size: 0.9em; }
+    .btn-approve { background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .btn-approve:hover { background: #43a047; }
 </style>
 {% endblock %}
 
@@ -100,6 +112,65 @@
         </div>
         <div style="height: 74px;"></div> <button class="btn btn-danger" onclick="executarAcao('errata')">🔓 Reabrir Dia</button>
     </div>
+</div>
+
+<div class="data-section">
+    <h2 class="section-title">🔔 Trocas Aguardando Aprovação</h2>
+    {% if trocas_pendentes.is_empty() %}
+        <p style="color: #777;">Nenhuma troca pendente no momento.</p>
+    {% else %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Posto</th>
+                    <th>Solicitante (Sai)</th>
+                    <th>Substituto (Entra)</th>
+                    <th>Motivo</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for troca in trocas_pendentes %}
+                <tr>
+                    <td>{{ troca.data }}</td>
+                    <td>{{ troca.posto }}</td>
+                    <td style="color: #d32f2f;">{{ troca.solicitante }}</td>
+                    <td style="color: #388e3c;">{{ troca.substituto }}</td>
+                    <td><em>{{ troca.motivo }}</em></td>
+                    <td>
+                        <button class="btn-approve" onclick="aprovarTroca('{{ troca.id }}')">✔ Aprovar</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+
+<div class="data-section">
+    <h2 class="section-title">⚖️ Militares com Punição (Deve)</h2>
+    {% if punidos.is_empty() %}
+        <p style="color: #777;">Nenhum militar deve serviços no momento.</p>
+    {% else %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Posto / Graduação</th> <th>Nome de Guerra</th>
+                    <th>Saldo Devedor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in punidos %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td><span class="badge-punicao">{{ p.saldo }} Serviços</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
 </div>
 
 <script>

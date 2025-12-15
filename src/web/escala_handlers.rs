@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
     services::escala_service,
     models::escala::{PedidoTrocaPayload, GerarPeriodoRequest, PublicarRequest},
-    templates::{EscalaTemplate, EscalaDiaView, AlocacaoExibicao, AdminEscalaPage},
+    templates::{EscalaTemplate, EscalaDiaView, AlocacaoExibicao, AdminEscalaPage, UserPunido, TrocaPendenteAdmin},
 };
 use tower_sessions::Session;
 use chrono::Datelike;
@@ -167,7 +167,16 @@ pub async fn handle_solicitar_troca(
         Ok(Some(id)) => id,
         _ => return (StatusCode::UNAUTHORIZED, "Login necessário").into_response(),
     };
-    match escala_service::solicitar_troca(&state.db_pool, &user_id, &payload.alocacao_id, &payload.substituto_id, &payload.motivo).await {
+
+    // Passamos payload.alocacao_substituto_id (que deve ser Option<String> na struct)
+    match escala_service::solicitar_troca(
+        &state.db_pool, 
+        &user_id, 
+        &payload.alocacao_id, 
+        &payload.substituto_id, 
+        payload.alocacao_substituto_id, // <--- Passando o novo campo
+        &payload.motivo
+    ).await {
         Ok(msg) => (StatusCode::OK, msg).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
@@ -197,37 +206,93 @@ pub async fn handle_admin_escala_page(
     State(state): State<AppState>,
     session: Session,
 ) -> impl IntoResponse {
+    // 1. Verificar se há sessão (Login)
     let user_id = match session.get::<String>("user_id").await {
         Ok(Some(id)) => id,
-        _ => return Redirect::to("/").into_response(), // Redireciona se não logado
+        _ => return Redirect::to("/").into_response(),
     };
 
-    // Verificar permissões (Admin ou Escalante)
-    let tem_permissao = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM user_roles 
-           WHERE user_id = ? AND role IN ('admin', 'escalante')"#, 
+    // 2. Verificar Permissão e Buscar Nome (SIMPLIFICAÇÃO: 1 Query Única)
+    // Busca o nome APENAS se o usuário tiver a role 'admin' ou 'escalante'.
+    // Se não retornar nada, significa que não tem permissão.
+    let acesso = sqlx::query!(
+        r#"
+        SELECT u.name 
+        FROM users u
+        JOIN user_roles ur ON u.id = ur.user_id
+        WHERE u.id = ? AND ur.role IN ('admin', 'escalante')
+        LIMIT 1
+        "#,
         user_id
     )
-    .fetch_one(&state.db_pool)
+    .fetch_optional(&state.db_pool)
     .await
-    .unwrap_or(0) > 0;
+    .unwrap_or(None);
 
-    if !tem_permissao {
-        return (StatusCode::FORBIDDEN, "Acesso restrito ao Escalante.").into_response();
-    }
+    let user_name = match acesso {
+        Some(registro) => registro.name,
+        None => return (StatusCode::FORBIDDEN, "Acesso negado. Apenas Escalantes.").into_response(),
+    };
 
-    // Buscar nome para exibir
-    let user_name = sqlx::query_scalar!("SELECT name FROM users WHERE id = ?", user_id)
-        .fetch_one(&state.db_pool)
-        .await
-        .unwrap_or("Admin".to_string());
+    // 3. Buscar Lista de Punidos (Quem deve serviço)
+    // Ordenado por quem deve mais.
+    let punidos = sqlx::query_as!(
+        UserPunido,
+        r#"
+        SELECT id, name, saldo_punicoes as "saldo!"
+        FROM users 
+        WHERE saldo_punicoes > 0 
+        ORDER BY saldo_punicoes DESC, name ASC
+        "#
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default();
 
+    // 4. Buscar Trocas Pendentes de Aprovação
+    // JOINs necessários para transformar IDs em Nomes legíveis
+    let trocas_rows = sqlx::query!(
+        r#"
+        SELECT 
+            t.id, 
+            t.motivo, 
+            u1.name as solicitante, 
+            u2.name as substituto, 
+            e.data, 
+            p.nome as posto
+        FROM trocas t
+        JOIN users u1 ON t.solicitante_id = u1.id
+        JOIN users u2 ON t.substituto_id = u2.id
+        JOIN alocacoes a ON t.alocacao_id = a.id
+        JOIN escalas e ON a.data = e.data
+        JOIN postos p ON a.posto_id = p.id
+        WHERE t.status = 'AguardandoEscalante'
+        ORDER BY e.data ASC
+        "#
+    )
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap_or_default();
+
+    // Converter resultados do banco para a struct do Template
+    let trocas_pendentes = trocas_rows.into_iter().map(|row| TrocaPendenteAdmin {
+        id: row.id,
+        solicitante: row.solicitante,
+        substituto: row.substituto,
+        data: row.data.unwrap_or_else(|| "".to_string()),
+        posto: row.posto,
+        motivo: row.motivo.unwrap_or_else(|| "".to_string()),
+    }).collect();
+
+    // 5. Renderizar Template
     let template = AdminEscalaPage {
         user_name,
+        punidos,
+        trocas_pendentes,
     };
 
     match template.render() {
         Ok(html) => Html(html).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Erro ao renderizar painel: {}", e)).into_response(),
     }
 }

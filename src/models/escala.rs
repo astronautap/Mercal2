@@ -89,4 +89,5 @@ pub struct PedidoTrocaPayload {
     pub alocacao_id: String,
     pub substituto_id: String,
     pub motivo: String, // Obrigatório agora
+    pub alocacao_substituto_id: Option<String>,
 }

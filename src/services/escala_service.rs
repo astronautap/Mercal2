@@ -212,56 +212,165 @@ pub async fn publicar_escala(pool: &SqlitePool, inicio: &str, fim: &str) -> Resu
     Ok(format!("{} dias de escala foram tornados OFICIAIS (Publicados).", res.rows_affected()))
 }
 
-// --- SOLICITAR TROCA (Com Motivo e Validação de Status) ---
 pub async fn solicitar_troca(
     pool: &SqlitePool, 
     solicitante_id: &str, 
     alocacao_id: &str, 
     substituto_id: &str,
+    alocacao_substituto_id: Option<String>,
     motivo: &str
 ) -> Result<String, String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. Validar: A escala ainda é Rascunho?
-    let info = sqlx::query!(
-        r#"SELECT e.status, a.data FROM alocacoes a JOIN escalas e ON a.data = e.data WHERE a.id = ?"#,
+    // 1. Buscar dados da Alocação Original
+    let origem = sqlx::query!(
+        r#"SELECT e.status, e.tipo_rotina, a.data, a.user_id, a.is_punicao 
+           FROM alocacoes a JOIN escalas e ON a.data = e.data WHERE a.id = ?"#,
         alocacao_id
     ).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    let (status, data_servico) = match info {
-        Some(i) => (i.status.unwrap_or("Rascunho".to_string()), i.data),
-        None => return Err("Alocação não encontrada".into())
-    };
+    let origem = origem.ok_or("Alocação original não encontrada")?;
 
-    if status == "Publicada" {
-        return Err("Esta escala já está PUBLICADA. Alterações só via Admin/Escalante.".into());
+    // Regras Básicas
+    if origem.status.unwrap_or_default() == "Publicada" {
+        return Err("Escala já publicada.".into());
+    }
+    if origem.user_id == substituto_id {
+        return Err("Você não pode trocar consigo mesmo (já é o titular desta vaga).".into());
+    }
+    if origem.is_punicao.unwrap_or(false) {
+        return Err("Serviços de PUNIÇÃO não podem ser trocados.".into());
     }
 
-    // 2. Validar Fadiga do Substituto
-    let conflito: bool = sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM alocacoes WHERE user_id = ? AND date(data) BETWEEN date(?, '-1 day') AND date(?, '+1 day'))"#)
-        .bind(substituto_id).bind(&data_servico).bind(&data_servico)
-        .fetch_one(&mut *tx).await.unwrap_or(false);
-    
-    if conflito { return Err("O substituto viola a regra de fadiga (24h).".into()); }
+    // 2. Definir Tipo de Troca
+    let mut tipo_troca = "Cobertura";
+    let mut id_troca_reciproca = None;
 
-    // 3. Inserir Pedido
+    if let Some(id_reciproco) = alocacao_substituto_id {
+        // --- LÓGICA DE PERMUTA ---
+        let destino = sqlx::query!(
+            r#"SELECT e.tipo_rotina, a.user_id, a.is_punicao 
+               FROM alocacoes a JOIN escalas e ON a.data = e.data WHERE a.id = ?"#,
+            id_reciproco
+        ).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        let destino = destino.ok_or("Alocação do substituto não encontrada")?;
+
+        if destino.user_id != substituto_id {
+            return Err("A alocação indicada para troca não pertence ao substituto.".into());
+        }
+        if destino.is_punicao.unwrap_or(false) {
+            return Err("O substituto está cumprindo PUNIÇÃO e não pode permutar.".into());
+        }
+        
+        if origem.tipo_rotina != destino.tipo_rotina {
+            return Err("Permuta só é permitida entre dias do mesmo tipo (RN x RN ou RD x RD). Para tipos diferentes, use Cobertura.".into());
+        }
+
+        tipo_troca = "Permuta";
+        id_troca_reciproca = Some(id_reciproco);
+
+    } else {
+        // --- LÓGICA DE COBERTURA ---
+        // CORREÇÃO AQUI: Adicionado ::<_, i64> para tipar o retorno do SELECT 1
+        let conflito = sqlx::query_scalar::<_, i64>(
+            r#"SELECT 1 FROM alocacoes 
+               WHERE user_id = ? AND date(data) BETWEEN date(?, '-1 day') AND date(?, '+1 day')"#
+        )
+        .bind(substituto_id)
+        .bind(&origem.data)
+        .bind(&origem.data)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if conflito.is_some() {
+            return Err("O substituto viola a regra de fadiga (24h) para cobrir este dia.".into());
+        }
+    }
+
+    // 3. Registrar a Troca
     let uuid = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO trocas (id, solicitante_id, substituto_id, alocacao_id, status, motivo) VALUES (?, ?, ?, ?, 'Pendente', ?)")
-        .bind(uuid).bind(solicitante_id).bind(substituto_id).bind(alocacao_id).bind(motivo)
-        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    sqlx::query(
+        r#"INSERT INTO trocas 
+           (id, solicitante_id, substituto_id, alocacao_id, status, motivo, tipo, alocacao_substituto_id) 
+           VALUES (?, ?, ?, ?, 'Pendente', ?, ?, ?)"#
+    )
+    .bind(uuid)
+    .bind(solicitante_id)
+    .bind(substituto_id)
+    .bind(alocacao_id)
+    .bind(motivo)
+    .bind(tipo_troca)
+    .bind(id_troca_reciproca)
+    .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
     tx.commit().await.map_err(|e| e.to_string())?;
-    Ok("Troca solicitada! Aguarde aprovação do Escalante.".into())
+    Ok(format!("Pedido de {} realizado com sucesso!", tipo_troca))
 }
 
-// --- APROVAR TROCA (Mantém-se igual, mas agora lê da tabela trocas) ---
+
 pub async fn aprovar_troca(pool: &SqlitePool, troca_id: &str) -> Result<String, String> {
-    // ... (Use a implementação anterior, ela já está correta para processar) ...
-    // Apenas certifique-se de que ela funciona
-    // ... (Código omitido por brevidade, é igual ao anterior)
-    // Se quiser, posso repetir aqui.
-    crate::services::escala_service::aprovar_troca_impl_completa(pool, troca_id).await
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // Buscar dados da Troca
+    let troca = sqlx::query!(
+        r#"SELECT t.*, e.tipo_rotina as tipo_rotina_origem
+           FROM trocas t 
+           JOIN alocacoes a ON t.alocacao_id = a.id 
+           JOIN escalas e ON a.data = e.data
+           WHERE t.id = ?"#,
+        troca_id
+    ).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+
+    let t = troca.ok_or("Troca não encontrada")?;
+
+    if t.tipo.as_deref() == Some("Permuta") {
+        // --- EXECUÇÃO DE PERMUTA (Troca Simples, Sem Contadores) ---
+        let id_origem = t.alocacao_id;
+        let id_destino = t.alocacao_substituto_id.ok_or("Erro: Permuta sem alocação recíproca definida")?;
+
+        // Troca os IDs nas alocações
+        // 1. Coloca Substituto na Origem
+        sqlx::query("UPDATE alocacoes SET user_id = ? WHERE id = ?")
+            .bind(&t.substituto_id).bind(&id_origem)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        
+        // 2. Coloca Solicitante no Destino
+        sqlx::query("UPDATE alocacoes SET user_id = ? WHERE id = ?")
+            .bind(&t.solicitante_id).bind(&id_destino)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        
+        // Não mexe em contadores (servicos_rn/rd) pois trocaram "elas por elas"
+
+    } else {
+        // --- EXECUÇÃO DE COBERTURA (Um sai, Outro entra, Contadores mudam) ---
+        
+        // 1. Atualiza Alocação
+        sqlx::query("UPDATE alocacoes SET user_id = ? WHERE id = ?")
+            .bind(&t.substituto_id).bind(&t.alocacao_id)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        // 2. Atualiza Contadores
+        // Quem SAI (Solicitante) -> Diminui 1
+        // Quem ENTRA (Substituto) -> Aumenta 1
+        let col = if t.tipo_rotina_origem == "RN" { "servicos_rn" } else { "servicos_rd" };
+        
+        let sql_dec = format!("UPDATE users SET {} = {} - 1 WHERE id = ?", col, col);
+        let sql_inc = format!("UPDATE users SET {} = {} + 1 WHERE id = ?", col, col);
+
+        sqlx::query(&sql_dec).bind(&t.solicitante_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        sqlx::query(&sql_inc).bind(&t.substituto_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+
+    // Finalizar
+    sqlx::query("UPDATE trocas SET status = 'Aprovada', data_resposta = datetime('now') WHERE id = ?")
+        .bind(troca_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok("Troca aprovada e processada com sucesso.".into())
 }
+
 
 // Helper interno para não duplicar código na resposta
 async fn aprovar_troca_impl_completa(pool: &SqlitePool, troca_id: &str) -> Result<String, String> {

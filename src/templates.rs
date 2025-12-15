@@ -73,6 +73,23 @@ pub struct EscalaTemplate {
     pub user_atual_id: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct UserPunido {
+    pub id: String,
+    pub name: String,
+    pub saldo: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrocaPendenteAdmin {
+    pub id: String,
+    pub solicitante: String,
+    pub substituto: String,
+    pub data: String,
+    pub posto: String,
+    pub motivo: String,
+}
+
 // --- PRESENÇA ---
 
 #[derive(Template)]
@@ -125,5 +142,6 @@ impl<'a> AdminEditUserPage<'a> {
 #[template(path = "admin_escala.html")]
 pub struct AdminEscalaPage {
     pub user_name: String,
-    // Podemos adicionar estatísticas aqui no futuro (ex: "X dias rascunho")
+    pub punidos: Vec<UserPunido>,
+    pub trocas_pendentes: Vec<TrocaPendenteAdmin>,
 }
